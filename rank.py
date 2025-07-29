@@ -1,112 +1,190 @@
 import streamlit as st
 import pandas as pd
-import time
-from PIL import Image
-import base64
+import numpy as np
+import io
+from fpdf import FPDF
+import requests
+import json
 
-# Set Streamlit page configuration
-st.set_page_config(page_title="AP EAMCET Rank vs College Predictor", layout="wide")
-
-# Custom CSS for gradient background and animations
-st.markdown("""
-    <style>
-    html, body, [class*="css"]  {
-        background: linear-gradient(to right, #2193b0, #6dd5ed);
-        color: white;
-    }
-    .stButton>button {
-        background-color: #00c6ff;
-        color: white;
-        border: none;
-        padding: 0.6em 1.2em;
-        font-size: 16px;
-        border-radius: 8px;
-        transition: background-color 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #005bea;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# Load Excel data
-@st.cache_data
+# Load Excel file
 def load_data():
-    df = pd.read_excel("apc.xlsx", dtype=str)
-
-    df.columns = df.columns.str.strip().str.upper().str.replace(" ", "_").str.replace("-", "_")
-
-    if df.iloc[0].isnull().sum() > 3:
-        df.columns = df.iloc[1]
-        df = df[2:].reset_index(drop=True)
-        df.columns = df.columns.str.strip().str.upper().str.replace(" ", "_").str.replace("-", "_")
-
-    if 'BRANCH_CODE' in df.columns:
-        df['BRANCH_CODE'] = df['BRANCH_CODE'].astype(str).str.strip()
-
+    df = pd.read_excel('apc.xlsx')
+    df.columns = df.iloc[0]
+    df = df[1:]
+    df = df.reset_index(drop=True)
+    df.columns = df.columns.str.strip()
+    if 'branch_code' in df.columns:
+        df['branch_code'] = df['branch_code'].astype(str).str.strip()
     return df
 
-df = load_data()
-
-# Get caste-gender rank columns dynamically
+# Identify caste-gender rank columns
 def get_rank_columns(df):
-    return [col for col in df.columns if any(x in col for x in ['_BOYS', '_GIRLS', '_MALE', '_FEMALE'])]
+    return [col for col in df.columns if any(x in col for x in ['_BOYS', '_GIRLS'])]
 
-rank_columns = get_rank_columns(df)
+# Generate PDF
+def generate_pdf(df):
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=10)
+    pdf.set_font('Arial', 'B', 14)
+    pdf.cell(0, 10, 'Manjunathareddy Journey Predictor - AP EAPCET', ln=True, align='C')
+    pdf.ln(3)
+    pdf.set_font('Arial', '', 8)
+    note = (
+        "Note: This is based on previous cutoffs. It may vary slightly in some cases. "
+        "Before proceeding, please cross-check the information with official sources."
+    )
+    pdf.multi_cell(0, 5, note)
+    pdf.ln(4)
 
-# Fallback if BRANCH is missing
-if 'BRANCH' not in df.columns:
-    st.error("The Excel file must include a 'BRANCH' column.")
-    st.stop()
+    # Set column widths
+    column_widths = {
+        'INSTCODE': 20, 'NAME OF THE INSTITUTION': 60, 'INST_REG': 20,
+        'DIST': 25, 'A_REG': 20, 'branch_code': 20, 'PLACE': 25, 'COLLFEE': 20,
+    }
 
-branches = df['BRANCH'].dropna().unique()
+    rank_col = [col for col in df.columns if col.endswith('_BOYS') or col.endswith('_GIRLS')]
+    if rank_col:
+        column_widths[rank_col[0]] = 25
 
-# Sidebar user inputs
-st.sidebar.header("Enter Your Details")
-rank = st.sidebar.number_input("Your AP EAMCET Rank", min_value=1, step=1)
-caste_gender_column = st.sidebar.selectbox("Select Caste & Gender", options=sorted(rank_columns))
-branch = st.sidebar.selectbox("Preferred Branch", sorted(branches))
+    columns = df.columns.tolist()
+    for col in columns:
+        if col not in column_widths:
+            column_widths[col] = 25
 
-# Title and description
-st.markdown("""
-    <div style="display: flex; justify-content: center;">
-        <lottie-player src="https://assets10.lottiefiles.com/packages/lf20_b88nh30c.json"  background="transparent"  speed="1"  style="width: 300px; height: 300px;"  loop  autoplay></lottie-player>
-    </div>
-""", unsafe_allow_html=True)
+    # Header
+    pdf.set_font('Arial', 'B', 8)
+    for col in columns:
+        pdf.cell(column_widths[col], 6, str(col)[:30], border=1, align='C')
+    pdf.ln()
 
-st.title("🎯 AP EAMCET Rank vs College Predictor")
-st.markdown("""
-    🔍 Find out which colleges you can get based on your **rank**, **caste**, **gender**, and **branch** preference using **2023 cutoff data**.
-""")
+    # Rows
+    pdf.set_font('Arial', '', 7)
+    for _, row in df.iterrows():
+        for col in columns:
+            text = str(row[col]) if pd.notnull(row[col]) else ''
+            if len(text) > 50:
+                text = text[:47] + '...'
+            pdf.cell(column_widths[col], 6, text, border=1, align='C')
+        pdf.ln()
 
-# Filter logic on button click
-if st.sidebar.button("🎓 Predict Colleges"):
-    with st.spinner("Analyzing data and predicting colleges..."):
-        time.sleep(2)
-        df_filtered = df[df['BRANCH'] == branch]
+    pdf_bytes = pdf.output(dest='S').encode('latin1')
+    return io.BytesIO(pdf_bytes)
 
-        if caste_gender_column not in df_filtered.columns:
-            st.error(f"Rank data for selection '{caste_gender_column}' not found in dataset.")
-            st.write("Available columns:", df_filtered.columns.tolist())
+# Load Lottie Animation
+def load_lottie_url(url):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+# Streamlit App
+def main():
+    st.set_page_config(layout="wide", page_title="AP EAPCET Predictor", page_icon="🎓")
+
+    # Custom CSS
+    st.markdown("""
+        <style>
+        body {
+            background-color: #f4faff;
+        }
+        .css-18e3th9 {
+            background-color: #e6f7ff;
+        }
+        .css-1d391kg {
+            padding: 2rem;
+        }
+        h1 {
+            color: #1e88e5;
+        }
+        .stButton>button {
+            background-color: #1e88e5;
+            color: white;
+            border-radius: 10px;
+        }
+        .stButton>button:hover {
+            background-color: #1565c0;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Load Animation
+    from streamlit_lottie import st_lottie
+    lottie_url = "https://lottie.host/0f361eb4-9355-4f13-8d4c-7552825a8434/Wh6q8WWZWR.json"  # education animation
+    lottie_json = load_lottie_url(lottie_url)
+
+    # Layout with animation
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.title('AP EAPCET Rank Predictor – By Manjunathareddy 🚀')
+        st.markdown("Find potential colleges based on your rank and preferences using previous year cutoffs.")
+    with col2:
+        if lottie_json:
+            st_lottie(lottie_json, height=180, speed=1, key="edu")
+
+    df = load_data()
+    rank_columns = get_rank_columns(df)
+
+    with st.form(key='filter_form'):
+        st.subheader("🎯 Filter Your Preferences")
+        caste_gender = st.selectbox('Select Caste & Gender:', sorted(rank_columns), placeholder="Select Caste")
+        rank_col = caste_gender
+        df[rank_col] = df[rank_col].replace(r'^\s*$', np.nan, regex=True)
+        selected_rank = st.text_input('Enter Your Rank (Required)', placeholder="e.g., 30000")
+
+        branch_options = sorted(df['branch_code'].dropna().unique()) if 'branch_code' in df else []
+        selected_branches = st.multiselect("Select Branch(es):", options=branch_options)
+
+        dist_options = sorted(df['DIST'].dropna().unique()) if 'DIST' in df else []
+        selected_dists = st.multiselect("Select District(s):", options=dist_options)
+
+        region_options = sorted(df['A_REG'].dropna().unique()) if 'A_REG' in df else []
+        selected_regions = st.multiselect("Select Region(s) (A_REG):", options=region_options)
+
+        submit = st.form_submit_button("Apply Filters")
+
+    if submit:
+        if not selected_rank or not selected_rank.strip().isdigit():
+            st.error("⚠️ Please enter a valid rank.")
+            return
+
+        rank = int(selected_rank.strip())
+        filtered_df = df.copy()
+
+        if selected_branches:
+            filtered_df = filtered_df[filtered_df['branch_code'].isin(selected_branches)]
+        if selected_dists:
+            filtered_df = filtered_df[filtered_df['DIST'].isin(selected_dists)]
+        if selected_regions:
+            filtered_df = filtered_df[filtered_df['A_REG'].isin(selected_regions)]
+
+        filtered_df[rank_col] = pd.to_numeric(filtered_df[rank_col], errors='coerce')
+        filtered_df = filtered_df.dropna(subset=[rank_col])
+
+        lower = max(0, rank - 20000)
+        upper = rank + 30000
+        result_df = filtered_df[(filtered_df[rank_col] >= lower) & (filtered_df[rank_col] <= upper)]
+
+        show_cols = [
+            'INSTCODE', 'NAME OF THE INSTITUTION', 'INST_REG', 'DIST', 'A_REG',
+            'branch_code', 'PLACE', rank_col, 'COLLFEE'
+        ]
+        result_df = result_df[[col for col in show_cols if col in result_df.columns]]
+        result_df = result_df.sort_values(by=rank_col)
+
+        if not result_df.empty:
+            st.success(f"✅ Found {len(result_df)} colleges for rank {rank} in range [{lower}, {upper}]")
+            st.dataframe(result_df, use_container_width=True)
+
+            st.subheader("📄 Download Results as PDF")
+            st.download_button(
+                label="📥 Download PDF",
+                data=generate_pdf(result_df),
+                file_name="Manjunathareddy_EAPCET_Predict_List.pdf",
+                mime="application/pdf"
+            )
         else:
-            df_filtered[caste_gender_column] = pd.to_numeric(df_filtered[caste_gender_column], errors='coerce')
-            df_filtered = df_filtered[df_filtered[caste_gender_column] >= rank]
+            st.warning("❌ No matching colleges found for your filters.")
 
-            if df_filtered.empty:
-                st.warning("No colleges found matching your input. Try a different branch or rank.")
-            else:
-                st.success(f"✅ Found {len(df_filtered)} college(s) matching your criteria")
-                display_cols = [col for col in ["INSTITUTE", "PLACE", "DIST", "BRANCH", caste_gender_column] if col in df_filtered.columns]
-                st.dataframe(df_filtered[display_cols].sort_values(by=caste_gender_column))
-
-                def get_table_download_link(df):
-                    towrite = df.to_csv(index=False)
-                    b64 = base64.b64encode(towrite.encode()).decode()
-                    return f'<a href="data:file/csv;base64,{b64}" download="predicted_colleges.csv">📥 Download Results as CSV</a>'
-
-                st.markdown(get_table_download_link(df_filtered), unsafe_allow_html=True)
-
-# Footer
-st.markdown("---")
-st.markdown("Designed with ❤️ by K.Manjunatha Reddy")
-st.markdown("📧 Email: manjukaif@gmail.com | 📱 Contact: +91 6300138360")
+if __name__ == '__main__':
+    main()
