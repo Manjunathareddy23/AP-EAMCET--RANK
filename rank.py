@@ -7,7 +7,7 @@ from fpdf import FPDF
 from streamlit_lottie import st_lottie
 import plotly.express as px
 
-# ------------------------- LOTTIE HELPER -------------------------
+# ------------------------- LOTTIE HELPER ------------------------
 def load_lottie_url(url: str):
     r = requests.get(url)
     if r.status_code != 200:
