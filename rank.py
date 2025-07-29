@@ -21,7 +21,6 @@ def load_data():
     df.columns = df.iloc[0]  # First row becomes header
     df = df[1:].reset_index(drop=True)
     df.columns = df.columns.str.strip()
-
     if 'branch_code' in df.columns:
         df['branch_code'] = df['branch_code'].astype(str).str.strip()
     return df
@@ -35,20 +34,15 @@ def generate_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=10)
-
     pdf.set_font('Arial', 'B', 14)
     pdf.cell(0, 10, 'Vamsi Journey Predictor – AP EAPCET', ln=True, align='C')
     pdf.ln(4)
-
     pdf.set_font('Arial', '', 8)
     note = "Note: Based on previous cutoffs. Always verify with official sources."
     pdf.multi_cell(0, 5, note)
     pdf.ln(3)
 
-    column_widths = {}
-    for col in df.columns:
-        max_width = max(df[col].astype(str).str.len().max(), len(col))
-        column_widths[col] = min(max_width * 2.5, 40)
+    column_widths = {col: min(max(df[col].astype(str).str.len().max(), len(col)) * 2.5, 40) for col in df.columns}
 
     pdf.set_font('Arial', 'B', 7)
     for col in df.columns:
@@ -68,15 +62,12 @@ def generate_pdf(df):
 def main():
     st.set_page_config(page_title="AP EAPCET Predictor – ManjunathaReddy", layout="wide")
 
-    # Load Lottie Animation
     lottie_url = "https://assets6.lottiefiles.com/packages/lf20_w51pcehl.json"
     lottie_json = load_lottie_url(lottie_url)
     if lottie_json:
         st_lottie(lottie_json, speed=1, height=200, key="header_anim")
 
-    # Title and Intro
     st.title("🎯 AP EAPCET Rank Predictor – K.Manjunatha Reddy")
-
     st.markdown("""
     <div style="background-color:#f9f9f9;padding:15px;border-radius:10px;
     box-shadow: 0 0 20px rgba(0, 123, 255, 0.2);margin-bottom:20px">
@@ -85,7 +76,6 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # Load static Excel data (no upload)
     try:
         df = load_data()
         st.success("✅ Loaded inbuilt Excel file: `apc.xlsx`")
@@ -95,7 +85,6 @@ def main():
 
     rank_columns = get_rank_columns(df)
 
-    # Form Section
     with st.form("filter_form"):
         st.subheader("🎛️ Filter Your Preferences")
 
@@ -113,7 +102,6 @@ def main():
 
         submitted = st.form_submit_button("🔍 Apply Filters")
 
-    # Apply logic if submitted
     if submitted:
         if not selected_rank or not selected_rank.strip().isdigit():
             st.error("⚠️ Please enter a valid numeric rank.")
@@ -131,19 +119,24 @@ def main():
             filtered_df = filtered_df[filtered_df['A_REG'].isin(selected_regions)]
 
         filtered_df = filtered_df.dropna(subset=[caste_gender])
-        lower, upper = max(0, rank - 5000), rank + 25000
+
+        # Smart rank range adjustment
+        lower, upper = max(0, rank - 10000), rank + 40000
         result_df = filtered_df[(filtered_df[caste_gender] >= lower) & (filtered_df[caste_gender] <= upper)]
+
+        # Sort by proximity to user's rank
+        result_df["RANK_DIFF"] = abs(result_df[caste_gender] - rank)
+        result_df = result_df.sort_values(by="RANK_DIFF")
 
         show_cols = [
             'INSTCODE', 'NAME OF THE INSTITUTION', 'INST_REG', 'DIST',
             'A_REG', 'branch_code', 'PLACE', caste_gender, 'COLLFEE'
         ]
         result_df = result_df[[col for col in show_cols if col in result_df.columns]]
-        result_df = result_df.sort_values(by=caste_gender)
 
         if not result_df.empty:
-            st.success(f"✅ Found **{len(result_df)}** matching colleges in the rank range [{lower} – {upper}]")
-            st.dataframe(result_df, use_container_width=True)
+            st.success(f"✅ Found **{len(result_df)}** matching colleges for your rank ({rank})")
+            st.dataframe(result_df.drop(columns=["RANK_DIFF"]), use_container_width=True)
 
             # 📊 Visualizations
             st.subheader("📊 Visual Insights")
@@ -172,7 +165,7 @@ def main():
                 mime="application/pdf"
             )
         else:
-            st.warning("❌ No colleges found for the given filters and rank.")
+            st.warning("❌ No colleges found. Try relaxing your filters or widening your rank range.")
 
 if __name__ == "__main__":
     main()
