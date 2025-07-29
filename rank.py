@@ -2,9 +2,19 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import requests
 from fpdf import FPDF
+from streamlit_lottie import st_lottie
+import plotly.express as px
 
-# Load Excel data
+# ------------------------- LOTTIE HELPER -------------------------
+def load_lottie_url(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+# ------------------------- DATA LOADER -------------------------
 def load_data(uploaded_file=None):
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
@@ -19,11 +29,11 @@ def load_data(uploaded_file=None):
         df['branch_code'] = df['branch_code'].astype(str).str.strip()
     return df
 
-# Get caste-gender rank columns
+# ------------------------- RANK COLUMNS -------------------------
 def get_rank_columns(df):
     return [col for col in df.columns if '_BOYS' in col or '_GIRLS' in col]
 
-# Generate PDF with clean layout
+# ------------------------- PDF GENERATION -------------------------
 def generate_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -38,19 +48,16 @@ def generate_pdf(df):
     pdf.multi_cell(0, 5, note)
     pdf.ln(3)
 
-    # Auto-fit column widths
     column_widths = {}
     for col in df.columns:
         max_width = max(df[col].astype(str).str.len().max(), len(col))
         column_widths[col] = min(max_width * 2.5, 40)
 
-    # Header
     pdf.set_font('Arial', 'B', 7)
     for col in df.columns:
         pdf.cell(column_widths[col], 6, str(col)[:30], border=1, align='C')
     pdf.ln()
 
-    # Data rows
     pdf.set_font('Arial', '', 6.5)
     for _, row in df.iterrows():
         for col in df.columns:
@@ -60,19 +67,34 @@ def generate_pdf(df):
 
     return io.BytesIO(pdf.output(dest='S').encode('latin1'))
 
-# Main Streamlit app
+# ------------------------- MAIN APP -------------------------
 def main():
-    st.set_page_config(page_title="AP EAPCET Predictor  – Manjunathareddy", layout="wide")
-    st.title('🎯 AP EAPCET Rank Predictor – K.Manjunatha Reddy')
+    st.set_page_config(page_title="AP EAPCET Predictor – ManjunathaReddy", layout="wide")
 
-    st.markdown("📘 This tool helps you find colleges based on your **EAPCET rank**, caste & gender, and preferences.")
+    # Load Lottie Animation
+    lottie_url = "https://assets6.lottiefiles.com/packages/lf20_w51pcehl.json"
+    lottie_json = load_lottie_url(lottie_url)
+    if lottie_json:
+        st_lottie(lottie_json, speed=1, height=200, key="header_anim")
 
-    # Optional file upload
+    # Title and Intro
+    st.title("🎯 AP EAPCET Rank Predictor – K.Manjunatha Reddy")
+
+    st.markdown("""
+    <div style="background-color:#f9f9f9;padding:15px;border-radius:10px;
+    box-shadow: 0 0 20px rgba(0, 123, 255, 0.2);margin-bottom:20px">
+    <h4 style="color:#1e90ff;">This app helps you predict possible colleges using your AP EAPCET rank based on previous data.<br>
+    Apply filters and download your personalized result as PDF.</h4>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Upload Excel File (optional)
     uploaded_file = st.file_uploader("📁 Upload Excel file (Optional)", type=['xlsx'])
 
     df = load_data(uploaded_file)
     rank_columns = get_rank_columns(df)
 
+    # Form Section
     with st.form("filter_form"):
         st.subheader("🎛️ Filter Your Preferences")
 
@@ -90,6 +112,7 @@ def main():
 
         submitted = st.form_submit_button("🔍 Apply Filters")
 
+    # Apply logic if submitted
     if submitted:
         if not selected_rank or not selected_rank.strip().isdigit():
             st.error("⚠️ Please enter a valid numeric rank.")
@@ -121,6 +144,25 @@ def main():
             st.success(f"✅ Found **{len(result_df)}** matching colleges in the rank range [{lower} – {upper}]")
             st.dataframe(result_df, use_container_width=True)
 
+            # 📊 Visualizations
+            st.subheader("📊 Visual Insights")
+
+            if 'DIST' in result_df.columns:
+                dist_data = result_df['DIST'].value_counts().reset_index()
+                dist_data.columns = ['District', 'College Count']
+                fig = px.bar(dist_data, x='District', y='College Count', color='District',
+                             title='Colleges Matching Your Rank by District',
+                             template='plotly_dark', height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+            if 'branch_code' in result_df.columns:
+                branch_data = result_df['branch_code'].value_counts().reset_index()
+                branch_data.columns = ['Branch', 'Count']
+                fig2 = px.pie(branch_data, values='Count', names='Branch',
+                              title='Branch Distribution of Matching Colleges', hole=0.3)
+                st.plotly_chart(fig2, use_container_width=True)
+
+            # 📥 PDF Download
             st.subheader("📥 Download Your Result as PDF")
             st.download_button(
                 label="📄 Download PDF",
