@@ -67,7 +67,7 @@ def generate_pdf(df):
     pdf_bytes = pdf.output(dest='S').encode('latin1')
     return io.BytesIO(pdf_bytes)
 
-# Load Lottie
+# Load Lottie animation from URL
 def load_lottie_url(url):
     r = requests.get(url)
     if r.status_code != 200:
@@ -78,7 +78,7 @@ def load_lottie_url(url):
 def main():
     st.set_page_config(layout="wide", page_title="AP EAPCET Predictor", page_icon="🎓")
 
-    # Custom Background + Style
+    # Background and custom style
     st.markdown("""
         <style>
         html, body, .stApp {
@@ -113,23 +113,22 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    # Lottie Animations
-    edu_animation = load_lottie_url("https://lottie.host/cc7ec4b6-ec09-4f64-9a10-c019ba89caa9/Zvl8COzIYw.json")
-    particles = load_lottie_url("https://lottie.host/0c8c6e7d-fc5d-490e-a2c6-4df6f2d3cf3b/26tpqHvXxy.json")
+    # Load Lottie animations
+    laptop_anim = load_lottie_url("https://lottie.host/cda31063-89ea-47ef-8797-7d98d5c81f6d/b1EYvVdWSN.json")  # Laptop animation
+    website_anim = load_lottie_url("https://lottie.host/6d0bb62b-0dc1-42f9-b7fa-9c41a38e0d03/QD6RwsYxfT.json")  # Website creation
 
-    # Show Background Effect
-    if particles:
-        st_lottie(particles, height=120, speed=0.3, loop=True, quality="low", key="particles")
-
-    # Title + Animation
-    col1, col2 = st.columns([2, 1])
+    # Top bar layout: Animation | Title | Animation
+    col1, col2, col3 = st.columns([1.2, 2.5, 1.2])
     with col1:
+        if laptop_anim:
+            st_lottie(laptop_anim, height=160, speed=1)
+    with col2:
         st.title("🚀 AP EAPCET Rank Predictor")
         st.markdown("### 🎓 Crafted with ❤️ by **Manjunathareddy**")
         st.markdown("*Get a smart estimate of potential colleges based on your rank and preferences.*")
-    with col2:
-        if edu_animation:
-            st_lottie(edu_animation, height=200, speed=1)
+    with col3:
+        if website_anim:
+            st_lottie(website_anim, height=160, speed=1)
 
     df = load_data()
     rank_columns = get_rank_columns(df)
