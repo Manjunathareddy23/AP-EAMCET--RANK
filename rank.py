@@ -10,7 +10,7 @@ st.set_page_config(page_title="AP EAMCET Rank vs College Predictor", layout="wid
 # Custom CSS for gradient background and animations
 st.markdown("""
     <style>
-    body {
+    html, body, [class*="css"]  {
         background: linear-gradient(to right, #2193b0, #6dd5ed);
         color: white;
     }
@@ -29,34 +29,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Lottie animation
-st.markdown("""
-    <div style="display: flex; justify-content: center;">
-        <lottie-player src="https://assets10.lottiefiles.com/packages/lf20_b88nh30c.json"  background="transparent"  speed="1"  style="width: 300px; height: 300px;"  loop  autoplay></lottie-player>
-    </div>
-""", unsafe_allow_html=True)
-
-# Title and description
-st.title("🎯 AP EAMCET Rank vs College Predictor")
-st.markdown("""
-    🔍 Find out which colleges you can get based on your **rank**, **caste**, **gender**, and **branch** preference using **2023 cutoff data**.
-""")
-
 # Load Excel data
 @st.cache_data
 def load_data():
     df = pd.read_excel("apc.xlsx", dtype=str)
 
-    # Clean column names
     df.columns = df.columns.str.strip().str.upper().str.replace(" ", "_").str.replace("-", "_")
 
-    # Ensure data starts from the right row
     if df.iloc[0].isnull().sum() > 3:
         df.columns = df.iloc[1]
         df = df[2:].reset_index(drop=True)
         df.columns = df.columns.str.strip().str.upper().str.replace(" ", "_").str.replace("-", "_")
 
-    # Standardize branch_code
     if 'BRANCH_CODE' in df.columns:
         df['BRANCH_CODE'] = df['BRANCH_CODE'].astype(str).str.strip()
 
@@ -70,11 +54,30 @@ def get_rank_columns(df):
 
 rank_columns = get_rank_columns(df)
 
+# Fallback if BRANCH is missing
+if 'BRANCH' not in df.columns:
+    st.error("The Excel file must include a 'BRANCH' column.")
+    st.stop()
+
+branches = df['BRANCH'].dropna().unique()
+
 # Sidebar user inputs
 st.sidebar.header("Enter Your Details")
 rank = st.sidebar.number_input("Your AP EAMCET Rank", min_value=1, step=1)
 caste_gender_column = st.sidebar.selectbox("Select Caste & Gender", options=sorted(rank_columns))
-branch = st.sidebar.selectbox("Preferred Branch", sorted(df['BRANCH'].unique()))
+branch = st.sidebar.selectbox("Preferred Branch", sorted(branches))
+
+# Title and description
+st.markdown("""
+    <div style="display: flex; justify-content: center;">
+        <lottie-player src="https://assets10.lottiefiles.com/packages/lf20_b88nh30c.json"  background="transparent"  speed="1"  style="width: 300px; height: 300px;"  loop  autoplay></lottie-player>
+    </div>
+""", unsafe_allow_html=True)
+
+st.title("🎯 AP EAMCET Rank vs College Predictor")
+st.markdown("""
+    🔍 Find out which colleges you can get based on your **rank**, **caste**, **gender**, and **branch** preference using **2023 cutoff data**.
+""")
 
 # Filter logic on button click
 if st.sidebar.button("🎓 Predict Colleges"):
@@ -93,9 +96,9 @@ if st.sidebar.button("🎓 Predict Colleges"):
                 st.warning("No colleges found matching your input. Try a different branch or rank.")
             else:
                 st.success(f"✅ Found {len(df_filtered)} college(s) matching your criteria")
-                st.dataframe(df_filtered[["INSTITUTE", "PLACE", "DIST", "BRANCH", caste_gender_column]].sort_values(by=caste_gender_column))
+                display_cols = [col for col in ["INSTITUTE", "PLACE", "DIST", "BRANCH", caste_gender_column] if col in df_filtered.columns]
+                st.dataframe(df_filtered[display_cols].sort_values(by=caste_gender_column))
 
-                # Option to download results
                 def get_table_download_link(df):
                     towrite = df.to_csv(index=False)
                     b64 = base64.b64encode(towrite.encode()).decode()
