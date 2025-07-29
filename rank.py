@@ -15,12 +15,9 @@ def load_lottie_url(url: str):
     return r.json()
 
 # ------------------------- DATA LOADER -------------------------
-def load_data(uploaded_file=None):
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-    else:
-        df = pd.read_excel("apc.xlsx")
-
+@st.cache_data
+def load_data():
+    df = pd.read_excel("apc.xlsx")
     df.columns = df.iloc[0]  # First row becomes header
     df = df[1:].reset_index(drop=True)
     df.columns = df.columns.str.strip()
@@ -88,10 +85,14 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # Upload Excel File (optional)
-    uploaded_file = st.file_uploader("📁 Upload Excel file (Optional)", type=['xlsx'])
+    # Load static Excel data (no upload)
+    try:
+        df = load_data()
+        st.success("✅ Loaded inbuilt Excel file: `apc.xlsx`")
+    except Exception as e:
+        st.error(f"Failed to load the Excel file: {e}")
+        return
 
-    df = load_data(uploaded_file)
     rank_columns = get_rank_columns(df)
 
     # Form Section
