@@ -5,3 +5,4 @@ fpdf
 openpyxl
 plotly
 streamlit-lottie
+requests
