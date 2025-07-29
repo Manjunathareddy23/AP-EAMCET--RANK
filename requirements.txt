@@ -3,3 +3,5 @@ pandas
 numpy
 fpdf
 openpyxl
+plotly
+streamlit-lottie
