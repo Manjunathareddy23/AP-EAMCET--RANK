@@ -35,7 +35,7 @@ def generate_pdf(df):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=10)
     pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, 'Vamsi Journey Predictor – AP EAPCET', ln=True, align='C')
+    pdf.cell(0, 10, 'ManjunathaReddy Predictor – AP EAPCET', ln=True, align='C')
     pdf.ln(4)
     pdf.set_font('Arial', '', 8)
     note = "Note: Based on previous cutoffs. Always verify with official sources."
@@ -120,11 +120,9 @@ def main():
 
         filtered_df = filtered_df.dropna(subset=[caste_gender])
 
-        # Smart rank range adjustment
         lower, upper = max(0, rank - 10000), rank + 40000
         result_df = filtered_df[(filtered_df[caste_gender] >= lower) & (filtered_df[caste_gender] <= upper)]
 
-        # Sort by proximity to user's rank
         result_df["RANK_DIFF"] = abs(result_df[caste_gender] - rank)
         result_df = result_df.sort_values(by="RANK_DIFF")
 
@@ -136,9 +134,8 @@ def main():
 
         if not result_df.empty:
             st.success(f"✅ Found **{len(result_df)}** matching colleges for your rank ({rank})")
-            st.dataframe(result_df.drop(columns=["RANK_DIFF"]), use_container_width=True)
+            st.dataframe(result_df.drop(columns=["RANK_DIFF"], errors='ignore'), use_container_width=True)
 
-            # 📊 Visualizations
             st.subheader("📊 Visual Insights")
 
             if 'DIST' in result_df.columns:
@@ -156,8 +153,7 @@ def main():
                               title='Branch Distribution of Matching Colleges', hole=0.3)
                 st.plotly_chart(fig2, use_container_width=True)
 
-            # 📥 PDF Download
-            st.subheader("📥 Download Your Result as PDF")
+            st.subheader("📅 Download Your Result as PDF")
             st.download_button(
                 label="📄 Download PDF",
                 data=generate_pdf(result_df),
