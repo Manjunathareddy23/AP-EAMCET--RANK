@@ -120,8 +120,7 @@ def main():
 
         filtered_df = filtered_df.dropna(subset=[caste_gender])
 
-        lower, upper = max(0, rank - 10000), rank + 40000
-        result_df = filtered_df[(filtered_df[caste_gender] >= lower) & (filtered_df[caste_gender] <= upper)]
+        result_df = filtered_df[(filtered_df[caste_gender] >= rank - 5000) & (filtered_df[caste_gender] <= rank + 5000)]
 
         result_df["RANK_DIFF"] = abs(result_df[caste_gender] - rank)
         result_df = result_df.sort_values(by="RANK_DIFF")
